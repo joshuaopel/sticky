@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>STICKY — third-person goo blob</title>
+<link rel="stylesheet" href="./src/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="app"></canvas>
+
+<div id="crosshair" aria-hidden="true">
+  <svg viewBox="0 0 40 40" width="40" height="40">
+    <circle cx="20" cy="20" r="9" class="ring" />
+    <circle cx="20" cy="20" r="1.6" class="dot" />
+    <path d="M20 2 v6 M20 32 v6 M2 20 h6 M32 20 h6" class="ticks" />
+  </svg>
+</div>
+
+<div id="hud">
+  <div class="row"><span class="k">strands</span><span class="v" id="hud-strands">0</span></div>
+  <div class="row"><span class="k">speed</span><span class="v" id="hud-speed">0.0</span></div>
+  <div class="row"><span class="k">state</span><span class="v" id="hud-state">airborne</span></div>
+  <div class="row"><span class="k">squash</span><span class="v" id="hud-squash">1.00</span></div>
+</div>
+
+<div id="keys">
+  <b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> cling &nbsp;
+  <b>LMB</b> shoot goo strand &nbsp; <b>hold LMB</b> reel in &nbsp;
+  <b>RMB</b> / <b>Q</b> cut strands &nbsp; <b>R</b> respawn &nbsp; <b>Esc</b> release mouse
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1>STICKY</h1>
+    <p class="sub">You are a blob of goo. Squash into the world, cling to walls, and swing on strands you shoot yourself.</p>
+    <ul>
+      <li><b>WASD</b> roll &middot; <b>Space</b> jump &middot; <b>Shift</b> cling to any surface</li>
+      <li><b>Left mouse</b> fires a strand of goo &mdash; hold it to winch yourself in</li>
+      <li><b>Right mouse</b> or <b>Q</b> cuts every strand &middot; <b>R</b> respawns you</li>
+    </ul>
+    <button id="start">click to play</button>
+    <p class="tiny">mouse look is pointer-locked &middot; press Esc to get your cursor back</p>
+  </div>
+</div>
+
+<div id="loadfail" hidden>
+  <div class="card">
+    <h1>can't load three.js</h1>
+    <p class="sub">This demo pulls three.js from a CDN. Check your network (or an offline/blocked connection) and reload.</p>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+<script>
+  // The demo pulls three.js from a CDN; if that never resolves, say so
+  // instead of leaving a black screen.
+  setTimeout(() => {
+    if (!window.__stickyBooted) {
+      document.getElementById('overlay').style.display = 'none';
+      document.getElementById('loadfail').hidden = false;
+    }
+  }, 6000);
+</script>
+</body>
+</html>
