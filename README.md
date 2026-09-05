@@ -4,16 +4,24 @@ A third-person demo where you play a blob of goo: a pressurised soft body that
 squashes against everything it touches, clings to walls, and fires strands of
 goo it can swing from and winch itself along — a slime-gun grapple.
 
-No build step. Serve the folder and open it.
+No build step, no install. Get it and run it:
 
 ```sh
-npm run dev          # python3 -m http.server 8000
-# then open http://localhost:8000
+git clone https://github.com/joshuaopel/sticky.git
+cd sticky
+git checkout claude/sticky-blob-goo-demo-qwoi7c
 ```
 
-(A server is required — ES modules do not load over `file://`. three.js is
-pulled from a CDN by the import map in `index.html`, so the first load needs
-network access.)
+**Windows** — double-click **`run.bat`** (or `run.bat 8080` for a different
+port). It serves the folder and opens your browser; close the window or press
+Ctrl+C to stop.
+
+**Anywhere** — `npm run dev`, which is the same tiny zero-dependency server
+(`node tools/serve.mjs --open`).
+
+A server is required either way: browsers refuse to load ES modules over
+`file://`. three.js comes from a CDN via the import map in `index.html`, so the
+first load needs network access.
 
 ## Controls
 

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Third-person sticky goo blob demo: pressurised soft-body physics and a slime-gun grapple.",
   "scripts": {
-    "dev": "python3 -m http.server 8000",
+    "dev": "node tools/serve.mjs --open",
     "test": "node test/sim.test.mjs",
     "bench": "node test/bench.mjs"
   },
