@@ -23,6 +23,20 @@ A server is required either way: browsers refuse to load ES modules over
 `file://`. three.js comes from a CDN via the import map in `index.html`, so the
 first load needs network access.
 
+### Hosting it on GitHub Pages
+
+The demo is entirely static and every path in it is relative, so it runs from a
+project subpath (`https://<user>.github.io/sticky/`) with no changes. On a
+public repo: **Settings → Pages → Source: Deploy from a branch**, pick the
+branch and `/ (root)`, save, and the site is live a minute later. No build step
+and no workflow needed; `.nojekyll` keeps Pages from running the files through
+Jekyll.
+
+Pages serves over HTTPS, which pointer lock requires, and three.js loads from an
+HTTPS CDN, so there is no mixed content. The only external dependency is that
+CDN — if you would rather the page not need it, three.js can be vendored into
+the repo and the import map pointed at the local copy.
+
 ## Controls
 
 | input | action |
