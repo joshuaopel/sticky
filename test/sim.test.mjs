@@ -258,7 +258,17 @@ run(60);
   check('the spawn is inside the walls',
     Math.abs(blob.center.x) < world.bounds && Math.abs(blob.center.z) < world.bounds);
 
+  // Driving out of the front gate used to put you in empty space; there is a
+  // causeway out there now.
+  blob.reset(new THREE.Vector3(0, 3, 30));
+  run(40);
+  run(90, { move: new THREE.Vector3(0, 0, 1), jump: false, cling: false });
+  check('the gate leads onto a causeway, not into the void',
+    blob.center.z > 34 && blob.center.y > 0, `z=${blob.center.z.toFixed(1)} y=${blob.center.y.toFixed(2)}`);
+
   // Drive north out of the courtyard: the bailey should be walkable.
+  blob.reset(world.spawn);
+  run(60);
   const fromZ = blob.center.z;
   run(150, { move: new THREE.Vector3(0, 0, -1), jump: false, cling: false });
   check('the bailey is drivable', blob.center.z < fromZ - 6, `dz=${(blob.center.z - fromZ).toFixed(1)}`);

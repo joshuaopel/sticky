@@ -262,8 +262,11 @@ const _rayHit = { normal: new THREE.Vector3() };
 const CELL = 8;
 
 export class World {
-  constructor(scene) {
+  constructor(scene, options = {}) {
     this.scene = scene;
+    // Point lights are the first thing a phone runs out of, so the number of
+    // torches that actually cast light is a budget.
+    this.maxLights = options.maxLights ?? 12;
     this.colliders = [];
     this.spawn = new THREE.Vector3(0, 4, 24);
     this.bounds = 34;
@@ -515,7 +518,7 @@ export class World {
 
     const flame = this._flame(x, y + 1.1, z, 0.55);
 
-    if (!lit) return;
+    if (!lit || this.torches.length >= this.maxLights) return;
     const light = new THREE.PointLight(0xffa03c, intensity, 24, 2);
     light.position.set(x, y + 1.2, z);
     this.scene.add(light);
@@ -535,7 +538,7 @@ export class World {
     }
 
     const fire = this._flame(x, 2.2, z, 1.05);
-    if (!lit) return;
+    if (!lit || this.torches.length >= this.maxLights) return;
     const light = new THREE.PointLight(0xff8a2c, 14, 30, 2);
     light.position.set(x, 2.6, z);
     this.scene.add(light);
@@ -576,7 +579,7 @@ export class World {
     // The ring itself is solid, so you can land on a chandelier.
     this.addBox(x, y - 0.15, z, radius * 2, 0.3, 0.6, { surface: 'iron', tile: 1.5 });
     this.addBox(x, y - 0.15, z, 0.6, 0.3, radius * 2, { surface: 'iron', tile: 1.5 });
-    if (!lit) return;
+    if (!lit || this.torches.length >= this.maxLights) return;
     const light = new THREE.PointLight(0xffb35a, 11, 26, 2);
     light.position.set(x, y + 0.8, z);
     this.scene.add(light);
@@ -714,6 +717,18 @@ export class World {
     this._torch(-4.6, 6, z - 4.6, { dir: { x: 0, z: 1 } });
     this._torch(4.6, 6, z - 4.6, { dir: { x: 0, z: 1 } });
     this._stairs(-11.5, 0, R - 5, { x: 0, z: -1 }, { steps: 10, rise: 1.55, run: 1.5, width: 4 });
+
+    // Beyond the gate: a causeway ending at a broken drawbridge. Without it the
+    // arch is a hole you can drive straight out of the world through.
+    this.addBox(0, -1, z + 7, 14, 2, 12, { surface: 'floor', tile: 4 });
+    this.addBox(-7.5, 0.9, z + 7, 1, 1.8, 12, { surface: 'stone' });   // parapets
+    this.addBox(7.5, 0.9, z + 7, 1, 1.8, 12, { surface: 'stone' });
+    this.addBox(0, 0.2, z + 14.5, 11, 0.7, 5, { surface: 'timber', rot: { x: -0.5 }, tile: 2 });
+    this.addBox(-5.6, 3.4, z + 12.4, 0.7, 7, 0.7, { surface: 'timber', tile: 1.5 });
+    this.addBox(5.6, 3.4, z + 12.4, 0.7, 7, 0.7, { surface: 'timber', tile: 1.5 });
+    this.addBox(0, 6.6, z + 12.4, 12, 0.7, 0.7, { surface: 'timber', tile: 1.5 });
+    this._rubble(0, z + 12, { count: 6, spread: 4, scale: 1.4 });
+    this._barrels(-5, z + 4, { count: 2 });
   }
 
   /** The keep: hollow, roofless, with a stair up the outside. */

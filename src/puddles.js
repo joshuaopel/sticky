@@ -15,6 +15,7 @@ export class PuddleField {
     this.scene = scene;
     this.world = world;
     this.max = options.max ?? 90;
+    const transmission = options.transmission ?? 0.55;
     this.puddles = [];
 
     this.geometry = new THREE.SphereGeometry(1, 12, 8);
@@ -22,7 +23,7 @@ export class PuddleField {
       color: 0x86d81a,
       roughness: 0.12,
       metalness: 0,
-      transmission: 0.55,
+      transmission,
       thickness: 0.5,
       ior: 1.33,
       clearcoat: 1,

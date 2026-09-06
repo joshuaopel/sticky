@@ -23,13 +23,17 @@ export function createGooMaterial(options = {}) {
     color = 0x8fe022,
     deep = 0x2f7a06,
     rim = 0xd6ff7a,
+    // On weak hardware transmission is dropped entirely (it costs a second
+    // render of the scene) and the body falls back to plain alpha.
+    transmission = 0.94,
+    opacity = 1,
   } = options;
 
   const material = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(color),
     roughness: 0.07,
     metalness: 0,
-    transmission: 0.94,
+    transmission,
     thickness: 1.5,
     ior: 1.34,
     attenuationColor: new THREE.Color(deep),
@@ -45,7 +49,7 @@ export function createGooMaterial(options = {}) {
     emissive: new THREE.Color(0x0a1a02),
     emissiveIntensity: 1,
     transparent: true,
-    opacity: 1,
+    opacity,
   });
 
   const uniforms = {
@@ -54,6 +58,8 @@ export function createGooMaterial(options = {}) {
     uRimColor: { value: new THREE.Color(rim) },
     uDeepColor: { value: new THREE.Color(deep) },
     uWobble: { value: 0 },
+    // Without transmission the body reads flat, so lean harder on the rim.
+    uRimBoost: { value: transmission > 0 ? 1 : 1.7 },
   };
   material.userData.uniforms = uniforms;
 
@@ -79,6 +85,7 @@ export function createGooMaterial(options = {}) {
         uniform float uTime;
         uniform float uFill;
         uniform float uWobble;
+        uniform float uRimBoost;
         uniform vec3 uRimColor;
         uniform vec3 uDeepColor;
         varying vec3 vGooLocal;
@@ -107,7 +114,7 @@ export function createGooMaterial(options = {}) {
         float fresnel = pow(1.0 - saturate(dot(gooView, normal)), 3.0);
         float shimmer = 0.5 + 0.5 * gooFlow(vGooLocal * 2.3 + vec3(0.0, uTime * 0.35, 0.0));
         // Wet rim, brighter the more goo there is and the harder it just got hit.
-        totalEmissiveRadiance += uRimColor * fresnel * (0.26 + 0.38 * uFill) * (0.75 + 0.45 * shimmer);
+        totalEmissiveRadiance += uRimColor * fresnel * (0.26 + 0.38 * uFill) * (0.75 + 0.45 * shimmer) * uRimBoost;
         totalEmissiveRadiance += uRimColor * uWobble * fresnel * 0.9;`
       );
   };

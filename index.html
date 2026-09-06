@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#05070a" />
 <title>STICKY — third-person goo blob</title>
 <link rel="stylesheet" href="./src/style.css" />
 <script type="importmap">
@@ -33,6 +37,16 @@
   <div class="row"><span class="k">state</span><span class="v" id="hud-state">airborne</span></div>
 </div>
 
+<!-- Touch controls: a floating stick on the left, buttons on the right. -->
+<div id="stick" aria-hidden="true"><i id="stick-knob"></i></div>
+<div id="pad" aria-hidden="true">
+  <button id="btn-cling" class="pad-btn small">CLING</button>
+  <button id="btn-jump" class="pad-btn small">JUMP</button>
+  <button id="btn-fire" class="pad-btn big">FIRE<span>hold to reel</span></button>
+  <button id="btn-cut" class="pad-btn small">CUT</button>
+</div>
+<button id="btn-respawn" class="pad-btn corner">R</button>
+
 <div id="keys">
   <b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> cling &nbsp;
   <b>LMB</b> shoot goo strand &nbsp; <b>hold LMB</b> reel in &nbsp;
@@ -51,7 +65,15 @@
       <li>Shooting spends goo and you <b>shrink</b> &mdash; roll over puddles to soak it back up</li>
     </ul>
     <button id="start">click to play</button>
-    <p class="tiny">mouse look is pointer-locked &middot; press Esc to get your cursor back</p>
+    <p class="tiny desktop-only">mouse look is pointer-locked &middot; press Esc to get your cursor back</p>
+    <p class="tiny touch-only">left thumb drives &middot; drag the right side to look &middot; buttons fire, jump and cling</p>
+  </div>
+</div>
+
+<div id="rotate">
+  <div class="card">
+    <h1>TURN&nbsp;IT</h1>
+    <p class="sub">STICKY wants landscape. Rotate your device to play.</p>
   </div>
 </div>
 

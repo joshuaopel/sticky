@@ -11,13 +11,23 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;                 /* no scroll or pinch over the game */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   background: #05070a;
   color: var(--ink);
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.04em;
 }
 
-#app { display: block; width: 100vw; height: 100vh; }
+#app { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+
+/* Only one of these shows, depending on how the device is driven. */
+.touch-only { display: none; }
+body.touch .touch-only { display: block; }
+body.touch .desktop-only { display: none; }
 
 /* ---- crosshair ---- */
 #crosshair {
@@ -45,8 +55,8 @@ body.dry #crosshair .dot { fill: #e0561f; }
 /* ---- hud ---- */
 #hud {
   position: fixed;
-  left: 16px;
-  top: 16px;
+  left: max(16px, env(safe-area-inset-left));
+  top: max(16px, env(safe-area-inset-top));
   padding: 10px 12px;
   min-width: 148px;
   background: var(--panel);
@@ -82,7 +92,7 @@ body.playing #hud { opacity: 1; }
 #keys {
   position: fixed;
   left: 50%;
-  bottom: 14px;
+  bottom: max(14px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   padding: 8px 14px;
   white-space: nowrap;
@@ -94,6 +104,7 @@ body.playing #hud { opacity: 1; }
   transition: opacity 0.25s ease;
 }
 body.playing #keys { opacity: 1; }
+body.touch #keys { display: none; }   /* the buttons say it better than a legend */
 #keys b { color: var(--goo); font-weight: 600; }
 
 /* ---- overlays ---- */
@@ -146,3 +157,123 @@ body.playing #overlay { display: none; }
 }
 #start:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(158, 240, 26, 0.3); }
 #start:active { transform: translateY(1px); }
+
+
+/* ---- touch controls ---- */
+#stick,
+#pad,
+#btn-respawn {
+  display: none;
+}
+
+body.touch.playing #stick,
+body.touch.playing #pad,
+body.touch.playing #btn-respawn {
+  display: flex;
+}
+
+#stick {
+  position: fixed;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;            /* centre on the touch point */
+  border: 2px solid rgba(158, 240, 26, 0.35);
+  border-radius: 50%;
+  background: rgba(10, 16, 12, 0.35);
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+#stick.visible { opacity: 1; }
+#stick-knob {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(158, 240, 26, 0.55);
+  box-shadow: 0 0 18px rgba(158, 240, 26, 0.45);
+}
+
+#pad {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  gap: 12px;
+  align-items: flex-end;
+  z-index: 6;
+}
+
+.pad-btn {
+  appearance: none;
+  font: inherit;
+  letter-spacing: 0.12em;
+  color: var(--goo);
+  background: rgba(10, 16, 12, 0.55);
+  border: 1.5px solid rgba(158, 240, 26, 0.4);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  touch-action: none;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+.pad-btn.small { width: 74px; height: 74px; font-size: 11px; }
+.pad-btn.big {
+  width: 112px;
+  height: 112px;
+  font-size: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-color: rgba(158, 240, 26, 0.75);
+  background: rgba(30, 60, 12, 0.5);
+}
+.pad-btn.big span {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: rgba(232, 245, 216, 0.5);
+}
+.pad-btn.pressed { transform: scale(0.93); background: rgba(158, 240, 26, 0.3); }
+.pad-btn.active { background: rgba(158, 240, 26, 0.35); color: #0b1405; }
+#btn-respawn {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: 46px;
+  height: 46px;
+  font-size: 13px;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+}
+
+/* Short landscape phones: shrink the furniture so it does not eat the view. */
+@media (max-height: 460px) {
+  .pad-btn.small { width: 62px; height: 62px; font-size: 10px; }
+  .pad-btn.big { width: 94px; height: 94px; font-size: 13px; }
+  #hud { padding: 7px 9px; min-width: 124px; font-size: 11px; }
+  .card { padding: 18px 22px; }
+  .card h1 { font-size: 28px; }
+  .card ul { margin-bottom: 14px; }
+}
+
+/* ---- portrait blocker ---- */
+#rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(120% 90% at 50% 40%, rgba(12, 24, 14, 0.9), rgba(3, 5, 7, 0.98));
+    z-index: 20;
+  }
+  #rotate .card { text-align: center; }
+  #rotate h1 { animation: tip 2.4s ease-in-out infinite; }
+}
+@keyframes tip {
+  0%, 55%, 100% { transform: rotate(0deg); }
+  25%, 40% { transform: rotate(-90deg); }
+}

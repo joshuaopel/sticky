@@ -5,10 +5,15 @@ import { GooBlob } from './blob.js';
 import { GooGun } from './strands.js';
 import { PuddleField } from './puddles.js';
 import { Controls } from './controls.js';
+import { detectQuality } from './quality.js';
+import { setupTouch } from './touch.js';
+
+const quality = detectQuality();
+document.body.classList.toggle('touch', quality.isTouch);
 
 const canvas = document.getElementById('app');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias, powerPreference: 'high-performance' });
+renderer.setPixelRatio(quality.pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -34,7 +39,7 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xbcd2ff, 1.15);
 sun.position.set(26, 42, 18);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
 sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 140;
 sun.shadow.camera.left = -46;
@@ -99,11 +104,15 @@ const sky = new THREE.Mesh(
 sky.frustumCulled = false;
 scene.add(sky);
 
-const world = new World(scene);
-const blob = new GooBlob(world, { position: world.spawn.clone() });
+const world = new World(scene, { maxLights: quality.maxTorchLights });
+const blob = new GooBlob(world, {
+  position: world.spawn.clone(),
+  detail: quality.blobDetail,
+  material: { transmission: quality.transmission, opacity: quality.blobOpacity },
+});
 scene.add(blob.mesh);
 
-const puddles = new PuddleField(scene, world);
+const puddles = new PuddleField(scene, world, { transmission: quality.puddleTransmission });
 puddles.seed();
 
 const gun = new GooGun(scene, world, blob, puddles);
@@ -125,7 +134,7 @@ controls.target.copy(blob.center);
 let elapsed = 0;
 
 // Dust hanging in the air — nothing sells a ruin like something in the light.
-const MOTES = 700;
+const MOTES = quality.motes;
 const motePositions = new Float32Array(MOTES * 3);
 const moteSpeeds = new Float32Array(MOTES);
 for (let i = 0; i < MOTES; i++) {
@@ -167,8 +176,21 @@ scene.add(blobLight);
 
 // ---------------------------------------------------------------- boot ----
 const overlay = document.getElementById('overlay');
-document.getElementById('start').addEventListener('click', () => controls.requestLock());
-overlay.addEventListener('click', () => controls.requestLock());
+controls.isTouch = quality.isTouch;
+document.getElementById('start').addEventListener('click', () => controls.start());
+overlay.addEventListener('click', () => controls.start());
+
+if (quality.isTouch) {
+  setupTouch(controls, canvas, {
+    stick: document.getElementById('stick'),
+    knob: document.getElementById('stick-knob'),
+    fire: document.getElementById('btn-fire'),
+    jump: document.getElementById('btn-jump'),
+    cut: document.getElementById('btn-cut'),
+    cling: document.getElementById('btn-cling'),
+    respawn: document.getElementById('btn-respawn'),
+  });
+}
 
 // --------------------------------------------------------------- loop -----
 const FIXED = 1 / 60;
@@ -250,6 +272,53 @@ function render(dt) {
   renderer.render(scene, camera);
 }
 
+/**
+ * Everything runs at full quality until the device says otherwise. Frame time
+ * is averaged over a couple of seconds — long enough that a shader compile or
+ * a backgrounded tab cannot trigger it — and each time it comes back slow we
+ * give up one more expensive thing, cheapest to look at first.
+ */
+const downgrades = [
+  () => {
+    renderer.setPixelRatio(Math.min(renderer.getPixelRatio(), 1));
+    motes.visible = false;
+    return 'resolution and dust';
+  },
+  () => {
+    // Transmission is a second render of the whole scene; the rim carries the
+    // goo on its own if it has to.
+    for (const material of [blob.mesh.material, puddles.material]) {
+      material.transmission = 0;
+      material.needsUpdate = true;
+    }
+    blob.transmission = 0;
+    blob.uniforms.uRimBoost.value = 1.7;
+    return 'refraction';
+  },
+  () => {
+    renderer.shadowMap.enabled = false;
+    sun.castShadow = false;
+    return 'shadows';
+  },
+];
+
+let sampleFrames = 0;
+let sampleTime = 0;
+let stage = 0;
+
+function measureFrames(frame) {
+  if (stage >= downgrades.length || frame > 0.5) return;
+  sampleFrames++;
+  sampleTime += frame;
+  if (sampleFrames < 150) return;
+  const average = sampleTime / sampleFrames;
+  sampleFrames = 0;
+  sampleTime = 0;
+  if (average < 0.030) return;                        // better than ~33 fps: leave it alone
+  const gave = downgrades[stage++]();
+  console.info(`[sticky] ${(1 / average).toFixed(0)} fps — dropped ${gave}`);
+}
+
 function tick() {
   requestAnimationFrame(tick);
   const frame = Math.min(clock.getDelta(), 0.1);
@@ -268,6 +337,8 @@ function tick() {
   }
 
   render(frame);
+
+  measureFrames(frame);
 
   hudTimer += frame;
   if (hudTimer > 0.1) {
@@ -288,18 +359,22 @@ function tick() {
   }
 }
 
-addEventListener('resize', () => {
+function resize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-});
+}
+addEventListener('resize', resize);
+// Rotating a phone fires orientationchange before the new size is readable.
+addEventListener('orientationchange', () => setTimeout(resize, 120));
+visualViewport?.addEventListener('resize', resize);
 
 // Debug handle: poke at the simulation from the console, e.g.
 //   sticky.blob.pressure = 14000
 //   sticky.paused = true            // freeze physics, keep rendering
 //   sticky.step(60)                 // advance 60 fixed frames by hand
 window.sticky = {
-  scene, camera, renderer, world, blob, gun, controls, puddles,
+  scene, camera, renderer, world, blob, gun, controls, puddles, quality,
   paused: false,
   step: (frames = 1, input) => {
     for (let i = 0; i < frames; i++) step(FIXED, input);

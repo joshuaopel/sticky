@@ -52,6 +52,13 @@ the repo and the import map pointed at the local copy.
 | `R` | respawn |
 | `Esc` | release the mouse |
 
+On a phone or tablet, hold it in landscape and tap to play. The left half of the
+screen is a floating stick — it appears wherever your thumb lands, so there is
+nothing to aim for — and dragging the right half looks around. **FIRE** shoots a
+strand and holding it reels you in, with **JUMP**, **CUT** and **CLING** beside
+it; cling is a toggle there rather than a held key, because you cannot hold a
+modifier and still drive and look. Portrait shows a rotate prompt.
+
 Up to four strands can be attached at once; firing a fifth drops the oldest.
 
 Every shot is **mass out of your body** — the blob visibly shrinks as you use
@@ -180,6 +187,13 @@ costs the same as a wall.
   you are stuck to, and widens its FOV with speed.
 - `src/main.js` — lighting, sky, fixed-timestep loop (1/60, max 5 steps per
   frame so a slow frame cannot spiral).
+- `src/touch.js` + `src/quality.js` — touch input, and what to render. Every
+  device gets the full look; the renderer only gives things up if frames
+  actually come in slow, averaged over ~150 of them so a shader compile or a
+  backgrounded tab cannot trigger it. It then sheds one thing at a time, in
+  order: resolution and dust, then refraction (the transmission pass is a
+  second render of the whole scene), then shadows. The only unconditional
+  concession is capping the pixel ratio at 2, since phones report 3.
 
 ## Tests
 

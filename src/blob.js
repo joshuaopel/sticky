@@ -26,7 +26,9 @@ export class GooBlob {
       radius = 1.15,
       detail = 3,
       position = new THREE.Vector3(0, 4, 16),
+      material = null,
     } = options;
+    this.materialOptions = material;
 
     this.world = world;
     this.radius = radius;
@@ -137,7 +139,7 @@ export class GooBlob {
   }
 
   _buildMesh() {
-    const material = createGooMaterial();
+    const material = createGooMaterial(this.materialOptions || {});
     this.uniforms = material.userData.uniforms;
     this.transmission = material.transmission;
     const mesh = new THREE.Mesh(this.geometry, material);

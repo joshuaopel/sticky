@@ -25,6 +25,12 @@ export class Controls {
 
     this.keys = new Set();
     this.locked = false;
+    this.isTouch = false;
+
+    // Touch state: a stick vector in screen space plus a cling toggle.
+    this.touch = { x: 0, y: 0 };
+    this.touchCling = false;
+    this.touchSensitivity = 0.0038;
 
     this.firePressed = false;
     this.fireHeld = false;
@@ -54,7 +60,7 @@ export class Controls {
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.dom;
       document.body.classList.toggle('playing', this.locked);
-      if (!this.locked) {
+      if (!this.locked && !this.isTouch) {
         this.keys.clear();
         this.fireHeld = false;
       }
@@ -82,12 +88,27 @@ export class Controls {
     window.addEventListener('blur', () => this.keys.clear());
   }
 
-  requestLock() {
-    this.dom.requestPointerLock();
+  /**
+   * Begin play. On a mouse the camera needs pointer lock; on touch there is
+   * nothing to lock, so we just go — and ask for fullscreen and a landscape
+   * lock, which is what makes a phone browser get out of the way.
+   */
+  start() {
+    if (!this.isTouch) {
+      this.dom.requestPointerLock();
+      return;
+    }
+    this.locked = true;
+    document.body.classList.add('playing');
+    const root = document.documentElement;
+    root.requestFullscreen?.().then(
+      () => screen.orientation?.lock?.('landscape').catch(() => {}),
+      () => {}
+    );
   }
 
   get clinging() {
-    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    return this.touchCling || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
   /** Camera-relative movement direction, flattened to the horizontal plane. */
@@ -99,6 +120,11 @@ export class Controls {
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) out.sub(_forward);
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) out.add(_right);
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) out.sub(_right);
+    // Stick: up the screen is away from the camera.
+    if (this.touch.x || this.touch.y) {
+      out.addScaledVector(_forward, -this.touch.y);
+      out.addScaledVector(_right, this.touch.x);
+    }
     if (out.lengthSq() > 1e-6) out.normalize();
     return out;
   }
