@@ -36,6 +36,12 @@ body.playing #crosshair { opacity: 0.85; }
 body.reeling #crosshair { opacity: 1; }
 body.reeling #crosshair .ring { stroke-width: 2.4; }
 
+/* out of goo: the crosshair coughs */
+body.dry #crosshair { opacity: 1; }
+body.dry #crosshair .ring,
+body.dry #crosshair .ticks { stroke: #e0561f; }
+body.dry #crosshair .dot { fill: #e0561f; }
+
 /* ---- hud ---- */
 #hud {
   position: fixed;
@@ -54,6 +60,24 @@ body.playing #hud { opacity: 1; }
 #hud .row { display: flex; justify-content: space-between; gap: 18px; }
 #hud .k { color: rgba(232, 245, 216, 0.45); text-transform: uppercase; }
 #hud .v { color: var(--goo); }
+
+#hud .meter {
+  height: 5px;
+  margin: 3px 0 7px;
+  background: rgba(158, 240, 26, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#hud .meter i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--goo-dim), var(--goo));
+  border-radius: 3px;
+  transition: width 0.16s linear, background 0.3s ease;
+}
+#hud .meter i.low { background: #e0561f; }
+#hud .meter i.over { background: linear-gradient(90deg, var(--goo), #eaffb0); box-shadow: 0 0 10px rgba(158, 240, 26, 0.6); }
 
 #keys {
   position: fixed;

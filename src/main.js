@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { World } from './world.js';
 import { GooBlob } from './blob.js';
 import { GooGun } from './strands.js';
+import { PuddleField } from './puddles.js';
 import { Controls } from './controls.js';
 
 const canvas = document.getElementById('app');
@@ -85,9 +86,20 @@ const world = new World(scene);
 const blob = new GooBlob(world, { position: world.spawn.clone() });
 scene.add(blob.mesh);
 
-const gun = new GooGun(scene, world, blob);
-blob.onSplat = (x, y, z, normal) => {
-  if (Math.random() < 0.25) gun.addSplat(new THREE.Vector3(x, y, z), normal, 0.5);
+const puddles = new PuddleField(scene, world);
+puddles.seed();
+
+const gun = new GooGun(scene, world, blob, puddles);
+
+// Hard landings throw goo off the body and leave it on the floor.
+const splatPoint = new THREE.Vector3();
+let splatBudget = 0;
+blob.onSplat = (x, y, z, normal, strength) => {
+  if (splatBudget > 0) return;                 // one puddle per impact, not per particle
+  const lost = blob.impactLoss * strength;
+  if (!blob.spendGoo(lost)) return;
+  splatBudget = 0.35;
+  puddles.spawn(splatPoint.set(x, y, z), normal, lost);
 };
 
 const controls = new Controls(camera, canvas, world);
@@ -116,15 +128,19 @@ const hud = {
   strands: document.getElementById('hud-strands'),
   speed: document.getElementById('hud-speed'),
   state: document.getElementById('hud-state'),
-  squash: document.getElementById('hud-squash'),
+  goo: document.getElementById('hud-goo'),
+  gooBar: document.getElementById('hud-goo-bar'),
 };
+
+let dryFlash = 0;
 
 function fire() {
   controls.aimPoint(aimPoint);
   shotDir.subVectors(aimPoint, blob.center).normalize();
   blob.particle(blob.nearestParticle(shotDir), muzzle);
   shotDir.subVectors(aimPoint, muzzle).normalize();
-  gun.shoot(muzzle.clone().addScaledVector(shotDir, 0.1), shotDir);
+  // Out of goo: the gun coughs instead of firing, and the HUD says so.
+  if (!gun.shoot(muzzle.clone().addScaledVector(shotDir, 0.1), shotDir)) dryFlash = 0.3;
 }
 
 function step(dt, override) {
@@ -139,13 +155,21 @@ function step(dt, override) {
 
   gun.reeling = input.fireHeld && gun.strandCount > 0;
   document.body.classList.toggle('reeling', gun.reeling);
+  splatBudget = Math.max(0, splatBudget - dt);
+  dryFlash = Math.max(0, dryFlash - dt);
+  document.body.classList.toggle('dry', dryFlash > 0);
 
   blob.update(dt, {
     move: input.move || (controls.locked ? controls.moveDirection() : controls.move.set(0, 0, 0)),
     jump: input.jump,
     cling: input.cling ?? controls.clinging,
   });
+  gun.viewPoint = camera.position;
   gun.update(dt);
+
+  const gained = puddles.collect(blob.center, blob.radius);
+  if (gained > 0) blob.addGoo(gained);
+  puddles.update(dt, blob.center);
 
   if (blob.center.y < -14) {
     gun.cutAll();
@@ -153,8 +177,12 @@ function step(dt, override) {
   }
 }
 
+const BASE_CAMERA_DISTANCE = 7.2;
+
 function render(dt) {
   const speed = blob.velocity.length();
+  // Pull in as the blob shrinks so a drained blob is still readable.
+  controls.distance = BASE_CAMERA_DISTANCE * (0.55 + 0.45 * blob.scale);
   controls.update(dt, blob.center, speed, blob.contacts > 0 ? blob.contactNormal : null);
   const camDistance = camera.position.distanceTo(blob.center);
   blob.setViewFade(THREE.MathUtils.clamp((camDistance - blob.radius * 0.9) / (blob.radius * 1.3), 0, 1));
@@ -194,7 +222,10 @@ function tick() {
         : blob.grounded
           ? 'grounded'
           : 'airborne';
-    hud.squash.textContent = blob.squash.toFixed(2);
+    hud.goo.textContent = `${Math.round(blob.goo * 100)}%`;
+    hud.gooBar.style.width = `${Math.min(100, blob.goo * 100)}%`;
+    hud.gooBar.classList.toggle('low', !blob.canSpend(blob.shotCost));
+    hud.gooBar.classList.toggle('over', blob.goo > 1.001);
   }
 }
 
@@ -209,7 +240,7 @@ addEventListener('resize', () => {
 //   sticky.paused = true            // freeze physics, keep rendering
 //   sticky.step(60)                 // advance 60 fixed frames by hand
 window.sticky = {
-  scene, camera, renderer, world, blob, gun, controls,
+  scene, camera, renderer, world, blob, gun, controls, puddles,
   paused: false,
   step: (frames = 1, input) => {
     for (let i = 0; i < frames; i++) step(FIXED, input);

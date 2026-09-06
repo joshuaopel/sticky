@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { World } from '../src/world.js';
 import { GooBlob } from '../src/blob.js';
 import { GooGun } from '../src/strands.js';
+import { PuddleField } from '../src/puddles.js';
 
 let failures = 0;
 function check(name, condition, detail = '') {
@@ -18,15 +19,21 @@ function check(name, condition, detail = '') {
 const scene = new THREE.Scene();
 const world = new World(scene);
 const blob = new GooBlob(world, { position: new THREE.Vector3(0, 8, 16) });
-const gun = new GooGun(scene, world, blob);
+const puddles = new PuddleField(scene, world);
+const gun = new GooGun(scene, world, blob, puddles);
 
 const DT = 1 / 60;
 const idle = { move: new THREE.Vector3(), jump: false, cling: false };
 
-function run(frames, input = idle) {
+function run(frames, input = idle, absorb = false) {
   for (let i = 0; i < frames; i++) {
     blob.update(DT, input);
     gun.update(DT);
+    if (absorb) {
+      const gained = puddles.collect(blob.center, blob.radius);
+      if (gained > 0) blob.addGoo(gained);
+    }
+    puddles.update(DT, blob.center);
   }
 }
 
@@ -151,7 +158,76 @@ blob.addVelocity(0, -0.45, 0); // slammed downward
 run(200);
 check('a fast drop does not tunnel through the floor', blob.center.y > 0.4, `y=${blob.center.y.toFixed(2)}`);
 
-// --- 8. raycast sanity -----------------------------------------------------
+// --- 8. the goo economy ----------------------------------------------------
+gun.cutAll();
+puddles.clear();
+blob.reset(new THREE.Vector3(0, 3, 22));
+run(60);
+{
+  const fullRadius = blob.radius;
+  check('a fresh blob is full', Math.abs(blob.goo - 1) < 1e-9 && Math.abs(blob.scale - 1) < 1e-9);
+
+  const before = blob.goo;
+  const dir = new THREE.Vector3(0, 0.4, -1).normalize();
+  gun.cooldown = 0;
+  const fired = gun.shoot(blob.center.clone().addScaledVector(dir, 1.3), dir);
+  check('firing a strand spends goo', fired && blob.goo < before - 0.05 + 1e-9,
+    `${before.toFixed(3)} -> ${blob.goo.toFixed(3)}`);
+
+  run(90);
+  check('spending goo shrinks the body', blob.radius < fullRadius - 0.01,
+    `${fullRadius.toFixed(3)} -> ${blob.radius.toFixed(3)}`);
+  check('radius tracks the cube root of mass', Math.abs(blob.scale - Math.cbrt(blob.goo)) < 0.02,
+    `scale=${blob.scale.toFixed(3)} cbrt=${Math.cbrt(blob.goo).toFixed(3)}`);
+  check('rest lengths scale with the body', Math.abs(blob.edgeRest[0] / blob.baseEdgeRest[0] - blob.scale) < 1e-5);
+  check('a shrunken blob still rests on the floor', Math.abs(blob.center.y - blob.radius) < 0.6,
+    `y=${blob.center.y.toFixed(2)} r=${blob.radius.toFixed(2)}`);
+  check('shrinking keeps the sim finite', finite());
+
+  // Drain it dry.
+  let shots = 0;
+  while (blob.canSpend(blob.shotCost) && shots < 100) {
+    gun.cooldown = 0;
+    if (gun.shoot(blob.center.clone().addScaledVector(dir, 1.3), dir)) shots++;
+    run(2);
+  }
+  check('the gun runs dry near the minimum', blob.goo < blob.minGoo + blob.shotCost,
+    `goo=${blob.goo.toFixed(3)} after ${shots} shots`);
+  gun.cooldown = 0;
+  check('a dry gun refuses to fire', gun.shoot(blob.center.clone(), dir) === false);
+  run(120);
+  check('an empty blob is visibly smaller', blob.scale < 0.75, `scale=${blob.scale.toFixed(3)}`);
+
+  // Feed it a puddle.
+  const drained = blob.goo;
+  const drainedRadius = blob.radius;
+  const meal = puddles.spawn(blob.center.clone().setY(0.02), new THREE.Vector3(0, 1, 0), 0.25);
+  meal.spread = 1;
+  run(90, idle, true);
+  check('rolling over a puddle takes the goo back', blob.goo > drained + 0.2,
+    `${drained.toFixed(3)} -> ${blob.goo.toFixed(3)}`);
+  check('absorbing goo grows the body', blob.radius > drainedRadius + 0.01,
+    `${drainedRadius.toFixed(3)} -> ${blob.radius.toFixed(3)}`);
+  check('the absorbed puddle is gone', !puddles.puddles.includes(meal));
+  check('growing keeps the sim finite', finite());
+
+  blob.addGoo(99);
+  check('goo is capped', blob.goo === blob.maxGoo);
+}
+
+// --- 9. puddle seeding -----------------------------------------------------
+{
+  const field = new PuddleField(scene, world);
+  const placed = field.seed(20);
+  check('the level seeds puddles onto surfaces', placed === 20, `placed=${placed}`);
+  const airborne = field.puddles.filter((p) => {
+    const hit = world.raycast(p.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(0, -1, 0), 2);
+    return !hit;
+  });
+  check('seeded puddles sit on something', airborne.length === 0, `floating=${airborne.length}`);
+}
+
+// --- 10. raycast sanity ----------------------------------------------------
 const hit = world.raycast(new THREE.Vector3(0, 3, 20), new THREE.Vector3(0, -1, 0), 20);
 check('raycast finds the floor', hit && Math.abs(hit.point.y) < 0.05 && hit.normal.y > 0.9,
   hit ? `y=${hit.point.y.toFixed(3)}` : 'no hit');

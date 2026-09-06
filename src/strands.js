@@ -82,7 +82,7 @@ class Strand {
     this.length = Math.max(this.minLength, this.length - rate * dt);
   }
 
-  update(dt, pullShare) {
+  update(dt, pullShare, viewPoint = null) {
     const pts = this.points;
     const prev = this.prev;
     const gravity = -16 * dt * dt;
@@ -144,6 +144,7 @@ class Strand {
       pts[0].copy(_blobPoint);
     }
 
+    this.viewPoint = viewPoint;
     this.age += dt;
     if (this.dying) {
       this.opacity = Math.max(0, this.opacity - dt * 4);
@@ -210,7 +211,14 @@ class Strand {
       // Fat where it meets the blob and the wall, with a slow travelling ripple.
       const profile = 0.55 + 0.65 * Math.pow(Math.abs(2 * t - 1), 2.2);
       const ripple = 1 + 0.16 * Math.sin(t * 14 - this.age * 7);
-      const radius = base * profile * ripple;
+      // Thin away to nothing right at the camera, so a strand running past your
+      // eye does not smear across the whole screen.
+      let near = 1;
+      if (this.viewPoint) {
+        const n = THREE.MathUtils.clamp((p.distanceTo(this.viewPoint) - 0.6) / 1.6, 0, 1);
+        near = n * n * (3 - 2 * n);
+      }
+      const radius = base * profile * ripple * near;
 
       for (let s = 0; s < SIDES; s++) {
         const ang = (s / SIDES) * Math.PI * 2;
@@ -260,10 +268,11 @@ class Projectile {
  * The slime gun: fires goo projectiles, turns hits into strands, winches you in.
  */
 export class GooGun {
-  constructor(scene, world, blob) {
+  constructor(scene, world, blob, puddles) {
     this.scene = scene;
     this.world = world;
     this.blob = blob;
+    this.puddles = puddles;
     this.strands = [];
     this.projectiles = [];
     this.dyingStrands = [];
@@ -271,6 +280,9 @@ export class GooGun {
     this.reeling = false;
     this.reelForce = 34;
     this.cooldown = 0;
+    // Fraction of a shot you get back by collecting where the strand landed.
+    this.recoverable = 0.6;
+    this.viewPoint = null;
 
     this.strandMaterial = new THREE.MeshPhysicalMaterial({
       color: GOO_COLOR,
@@ -290,58 +302,42 @@ export class GooGun {
       emissiveIntensity: 1.2,
       roughness: 0.3,
     });
-    this.splatMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7fc814,
-      emissive: 0x213f03,
-      roughness: 0.35,
-      transparent: true,
-      opacity: 0.95,
-    });
-
-    this.splats = [];
-    this.maxSplats = 60;
-    this.splatGeometry = new THREE.SphereGeometry(1, 10, 8);
   }
 
   get strandCount() {
     return this.strands.length;
   }
 
+  /**
+   * Fire, if there is goo to spare. Every shot is mass out of the body, so the
+   * blob visibly shrinks as you use the gun.
+   * @returns {boolean} whether the shot went out.
+   */
   shoot(origin, dir) {
-    if (this.cooldown > 0) return;
+    if (this.cooldown > 0) return false;
+    if (!this.blob.spendGoo(this.blob.shotCost)) return false;
     this.cooldown = 0.16;
     this.projectiles.push(new Projectile(this.scene, origin, dir, 62, this.projectileMaterial));
+    return true;
+  }
+
+  /** Cut a strand loose; what it was made of drips down to its anchor. */
+  _release(strand) {
+    strand.dying = true;
+    this.dyingStrands.push(strand);
+    if (this.puddles) {
+      this.puddles.spawn(strand.anchor, strand.anchorNormal, this.blob.shotCost * this.recoverable);
+    }
   }
 
   cutAll() {
-    for (const strand of this.strands) {
-      strand.dying = true;
-      this.dyingStrands.push(strand);
-    }
+    for (const strand of this.strands) this._release(strand);
     this.strands.length = 0;
-  }
-
-  addSplat(point, normal, scale = 1) {
-    const mesh = new THREE.Mesh(this.splatGeometry, this.splatMaterial);
-    mesh.position.copy(point).addScaledVector(normal, 0.02);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-    const spread = (0.22 + Math.random() * 0.2) * scale;
-    mesh.scale.set(spread, spread * 0.28, spread * (0.7 + Math.random() * 0.6));
-    mesh.rotateY(Math.random() * Math.PI);
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this.splats.push(mesh);
-    if (this.splats.length > this.maxSplats) {
-      const old = this.splats.shift();
-      this.scene.remove(old);
-    }
   }
 
   _attach(point, normal) {
     if (this.strands.length >= this.maxStrands) {
-      const oldest = this.strands.shift();
-      oldest.dying = true;
-      this.dyingStrands.push(oldest);
+      this._release(this.strands.shift());
     }
     _dir.subVectors(point, this.blob.center).normalize();
     const index = this.blob.nearestParticle(_dir);
@@ -349,18 +345,8 @@ export class GooGun {
     strand.initialLength = strand.length;
     this.strands.push(strand);
 
-    this.addSplat(point, normal, 1.3);
-    for (let i = 0; i < 3; i++) {
-      _a.copy(point).add(
-        new THREE.Vector3(
-          (Math.random() - 0.5) * 0.9,
-          (Math.random() - 0.5) * 0.9,
-          (Math.random() - 0.5) * 0.9
-        ).addScaledVector(normal, -0.2)
-      );
-      const hit = this.world.raycast(_a, _b.copy(normal).negate(), 1.2);
-      if (hit) this.addSplat(hit.point, hit.normal, 0.6);
-    }
+    // A little of the shot sticks where it landed straight away.
+    if (this.puddles) this.puddles.spawn(point, normal, this.blob.shotCost * 0.12);
     return strand;
   }
 
@@ -415,12 +401,12 @@ export class GooGun {
           this.blob.applyImpulse(_dir, this.reelForce * dt);
         }
       }
-      strand.update(dt, share / spread);
+      strand.update(dt, share / spread, this.viewPoint);
     }
 
     for (let i = this.dyingStrands.length - 1; i >= 0; i--) {
       const strand = this.dyingStrands[i];
-      strand.update(dt, 0);
+      strand.update(dt, 0, this.viewPoint);
       if (strand.opacity <= 0) {
         strand.dispose();
         this.dyingStrands.splice(i, 1);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createGooMaterial } from './goo-material.js';
 
 const _p = new THREE.Vector3();
 const _v = new THREE.Vector3();
@@ -105,6 +106,20 @@ export class GooBlob {
     for (let a = 0; a < this.count; a++) this.structuralCount += this.neighbors[a].length;
     this.structuralCount /= 2;
 
+    // --- goo budget -------------------------------------------------------
+    // Mass is a resource: 1.0 is a full blob, strands cost some of it, puddles
+    // give it back, and the body's size is the cube root of whatever is left.
+    this.baseRadius = radius;
+    this.baseParticleRadius = this.particleRadius;
+    this.baseEdgeRest = new Float32Array(this.edgeRest);
+    this.baseRestVolume = this.restVolume;
+    this.scale = 1;
+    this.goo = 1;
+    this.minGoo = 0.3;
+    this.maxGoo = 1.6;
+    this.shotCost = 0.055;
+    this.impactLoss = 0.014;
+
     // --- state ------------------------------------------------------------
     this.center = new THREE.Vector3();
     this.velocity = new THREE.Vector3();
@@ -113,6 +128,8 @@ export class GooBlob {
     this.grounded = false;
     this.clinging = false;
     this.squash = 1;
+    this.wobble = 0;
+    this.time = 0;
     this.onSplat = null;
 
     this.reset(position);
@@ -120,32 +137,24 @@ export class GooBlob {
   }
 
   _buildMesh() {
-    const material = new THREE.MeshPhysicalMaterial({
-      color: 0x8ede18,
-      roughness: 0.16,
-      metalness: 0,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
-      transmission: 0.35,
-      thickness: 1.4,
-      ior: 1.36,
-      sheen: 0.6,
-      sheenColor: new THREE.Color(0xd8ff8a),
-      emissive: new THREE.Color(0x1d3a05),
-      emissiveIntensity: 0.5,
-      transparent: true,
-      opacity: 1,
-    });
+    const material = createGooMaterial();
+    this.uniforms = material.userData.uniforms;
     this.transmission = material.transmission;
     const mesh = new THREE.Mesh(this.geometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
 
-    // A darker core sold through the translucent skin.
+    // A darker nucleus, seen through the translucent skin — it gives the
+    // refraction something to bend and makes the body read as deep.
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(this.radius * 0.55, 2),
-      new THREE.MeshStandardMaterial({ color: 0x3f7a06, roughness: 0.5, emissive: 0x152c03 })
+      new THREE.IcosahedronGeometry(this.baseRadius * 0.5, 2),
+      new THREE.MeshStandardMaterial({
+        color: 0x4d8f08,
+        roughness: 0.4,
+        emissive: new THREE.Color(0x1b3504),
+        emissiveIntensity: 1,
+      })
     );
     core.frustumCulled = false;
     this.core = core;
@@ -174,6 +183,14 @@ export class GooBlob {
   }
 
   reset(position = this.world.spawn) {
+    this.goo = 1;
+    this.scale = 1;
+    this.radius = this.baseRadius ?? this.radius;
+    this.particleRadius = this.baseParticleRadius ?? this.particleRadius;
+    if (this.baseEdgeRest) {
+      this.edgeRest.set(this.baseEdgeRest);
+      this.restVolume = this.baseRestVolume;
+    }
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
       this.pos[i3] = this.rest[i3] + position.x;
@@ -185,6 +202,52 @@ export class GooBlob {
     }
     this.center.copy(position);
     this.velocity.set(0, 0, 0);
+  }
+
+  /** 0 at the point of collapse, 1 when full. */
+  get fill() {
+    return THREE.MathUtils.clamp((this.goo - this.minGoo) / (1 - this.minGoo), 0, 1);
+  }
+
+  canSpend(amount) {
+    return this.goo - amount >= this.minGoo - 1e-6;
+  }
+
+  /** Spend goo; returns false (and spends nothing) when there is not enough. */
+  spendGoo(amount) {
+    if (!this.canSpend(amount)) return false;
+    this.goo -= amount;
+    return true;
+  }
+
+  addGoo(amount) {
+    this.goo = Math.min(this.maxGoo, this.goo + amount);
+  }
+
+  /**
+   * Resize the body about its centre. Rest lengths, rest volume and the
+   * contact radius all scale with it, so a small blob is a small *simulation*,
+   * not a shrunken render of a big one.
+   */
+  _applyScale(target) {
+    const ratio = target / this.scale;
+    if (Math.abs(ratio - 1) < 1e-6) return;
+
+    for (let i = 0; i < this.count; i++) {
+      const i3 = i * 3;
+      this.pos[i3] = this.center.x + (this.pos[i3] - this.center.x) * ratio;
+      this.pos[i3 + 1] = this.center.y + (this.pos[i3 + 1] - this.center.y) * ratio;
+      this.pos[i3 + 2] = this.center.z + (this.pos[i3 + 2] - this.center.z) * ratio;
+      this.prev[i3] = this.center.x + (this.prev[i3] - this.center.x) * ratio;
+      this.prev[i3 + 1] = this.center.y + (this.prev[i3 + 1] - this.center.y) * ratio;
+      this.prev[i3 + 2] = this.center.z + (this.prev[i3 + 2] - this.center.z) * ratio;
+    }
+
+    this.scale = target;
+    this.radius = this.baseRadius * target;
+    this.particleRadius = this.baseParticleRadius * target;
+    this.restVolume = this.baseRestVolume * target * target * target;
+    for (let e = 0; e < this.edgeRest.length; e++) this.edgeRest[e] = this.baseEdgeRest[e] * target;
   }
 
   particle(i, out = _p) {
@@ -387,7 +450,13 @@ export class GooBlob {
         const bounce = vn < 0 ? -vn * 0.06 : vn;        // goo barely bounces
         _v.copy(_t).addScaledVector(_n, bounce);
 
-        if (this.onSplat && vn < -6) this.onSplat(this.pos[i3], this.pos[i3 + 1], this.pos[i3 + 2], _n);
+        // A hard landing throws goo off: report the impact so the world can
+        // take a puddle out of us.
+        if (vn < -0.09) {
+          const strength = Math.min(1, (-vn - 0.09) * 6);
+          this.wobble = Math.max(this.wobble, strength);
+          if (this.onSplat) this.onSplat(this.pos[i3], this.pos[i3 + 1], this.pos[i3 + 2], _n, strength);
+        }
 
         this.prev[i3] = this.pos[i3] - _v.x;
         this.prev[i3 + 1] = this.pos[i3 + 1] - _v.y;
@@ -490,6 +559,24 @@ export class GooBlob {
     }
 
     this._finalize(dt);
+    this._updateBody(dt);
+  }
+
+  /** Size, jiggle decay and shader uniforms — everything the look reads from. */
+  _updateBody(dt) {
+    this.time += dt;
+    this.wobble = Math.max(0, this.wobble - dt * 2.2);
+
+    // Volume is proportional to goo, so the radius follows its cube root, eased
+    // so swelling and shrinking are visible rather than instant.
+    const target = Math.cbrt(this.goo);
+    this._applyScale(THREE.MathUtils.lerp(this.scale, target, 1 - Math.pow(0.02, dt)));
+
+    if (this.uniforms) {
+      this.uniforms.uTime.value = this.time;
+      this.uniforms.uFill.value = this.fill;
+      this.uniforms.uWobble.value = this.wobble;
+    }
   }
 
   _finalize(dt) {
@@ -536,7 +623,8 @@ export class GooBlob {
 
     if (this.core) {
       this.core.position.copy(this.center);
-      this.core.scale.setScalar(THREE.MathUtils.lerp(this.core.scale.x || 1, 0.75 + this.squash * 0.3, 0.2));
+      const coreScale = this.scale * (0.75 + this.squash * 0.3);
+      this.core.scale.setScalar(THREE.MathUtils.lerp(this.core.scale.x || coreScale, coreScale, 0.2));
     }
   }
 }

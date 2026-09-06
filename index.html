@@ -26,16 +26,18 @@
 </div>
 
 <div id="hud">
+  <div class="row"><span class="k">goo</span><span class="v" id="hud-goo">100%</span></div>
+  <div class="meter"><i id="hud-goo-bar"></i></div>
   <div class="row"><span class="k">strands</span><span class="v" id="hud-strands">0</span></div>
   <div class="row"><span class="k">speed</span><span class="v" id="hud-speed">0.0</span></div>
   <div class="row"><span class="k">state</span><span class="v" id="hud-state">airborne</span></div>
-  <div class="row"><span class="k">squash</span><span class="v" id="hud-squash">1.00</span></div>
 </div>
 
 <div id="keys">
   <b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> cling &nbsp;
   <b>LMB</b> shoot goo strand &nbsp; <b>hold LMB</b> reel in &nbsp;
-  <b>RMB</b> / <b>Q</b> cut strands &nbsp; <b>R</b> respawn &nbsp; <b>Esc</b> release mouse
+  <b>RMB</b> / <b>Q</b> cut strands &nbsp; roll over <b>puddles</b> to grow &nbsp;
+  <b>R</b> respawn &nbsp; <b>Esc</b> release mouse
 </div>
 
 <div id="overlay">
@@ -46,6 +48,7 @@
       <li><b>WASD</b> roll &middot; <b>Space</b> jump &middot; <b>Shift</b> cling to any surface</li>
       <li><b>Left mouse</b> fires a strand of goo &mdash; hold it to winch yourself in</li>
       <li><b>Right mouse</b> or <b>Q</b> cuts every strand &middot; <b>R</b> respawns you</li>
+      <li>Shooting spends goo and you <b>shrink</b> &mdash; roll over puddles to soak it back up</li>
     </ul>
     <button id="start">click to play</button>
     <p class="tiny">mouse look is pointer-locked &middot; press Esc to get your cursor back</p>

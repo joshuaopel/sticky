@@ -115,8 +115,11 @@ export class Controls {
   update(dt, focus, speed = 0, contactNormal = null) {
     // Nudge the orbit centre off the surface the blob is stuck to, so the arm
     // has somewhere to go when you are flattened against a wall.
-    _desired.copy(focus).addScaledVector(_offset.set(0, 1, 0), 0.7);
-    if (contactNormal) _desired.addScaledVector(contactNormal, 0.8);
+    // Framing offsets scale with the arm length, so a pulled-in camera does
+    // not shove the blob out of the bottom of the frame.
+    const framing = THREE.MathUtils.clamp(this.currentDistance / 7, 0.35, 1.1);
+    _desired.copy(focus).addScaledVector(_offset.set(0, 1, 0), 0.35 * framing);
+    if (contactNormal) _desired.addScaledVector(contactNormal, 0.4 * framing);
     this.target.lerp(_desired, 1 - Math.pow(0.0008, dt));
 
     const cosPitch = Math.cos(this.pitch);

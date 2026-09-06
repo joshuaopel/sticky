@@ -47,10 +47,17 @@ the repo and the import map pointed at the local copy.
 | Left mouse | fire a strand of goo at whatever the crosshair is over |
 | Hold left mouse | winch yourself toward the anchor |
 | Right mouse / `Q` | cut every strand |
+| roll over a **puddle** | soak it up and grow back |
 | `R` | respawn |
 | `Esc` | release the mouse |
 
 Up to four strands can be attached at once; firing a fifth drops the oldest.
+
+Every shot is **mass out of your body** — the blob visibly shrinks as you use
+the gun, and the HUD meter tells you how much is left. Run low and the gun
+coughs instead of firing. The goo is not gone, though: it is lying on the floor
+where you spent it, so roll over puddles to soak it back up. Overfill past 100%
+and you get a bigger blob than you started with.
 
 ## How it works
 
@@ -76,6 +83,38 @@ a Verlet particle:
 
 Clinging raises friction, adds adhesion for particles near a surface, and cuts
 gravity to 8%, which is what lets the blob hang and climb.
+
+### The look (`src/goo-material.js`)
+
+A physical material with high transmission, so three renders the scene behind
+the blob into its transmission pass and refracts it through the body — that is
+what makes it read as a translucent thing rather than a tinted ball.
+Attenuation gives it depth: thin edges are nearly clear, the middle soaks light
+into green. Two shader injections sit on top of that, hooked into stock chunks
+(`map_fragment` and `emissivemap_fragment`) so the rest of three's lighting is
+untouched:
+
+- **internal flow** — a cheap layered-sine field sampled in object space and
+  advected in time, so the goo looks like it is slowly moving inside itself;
+- **a fresnel rim** — the wet, bright edge you get where you are looking
+  through the most material. This is the part that sells jello.
+
+Both are scaled by how full the blob is, so a drained blob goes pale and
+watery while a fat one is deep and lively. Impacts spike the rim for a moment,
+which reads as a wobble of light across the surface.
+
+### Mass, shrinking and puddles (`src/puddles.js`)
+
+Goo is a resource. The body's rest state scales with the cube root of it, and
+`GooBlob._applyScale` rescales the *simulation* — rest lengths, rest volume and
+the contact radius — not just the render, so a small blob is genuinely a small
+soft body with its own squash and pressure, not a shrunken picture of a big one.
+
+Goo leaves the body when you fire a strand and when you hit something hard
+enough to splash. Everything you lose lands in the world as a puddle, and
+cutting a strand drips most of it back down at the anchor — which may be
+somewhere awkward to go and get. Puddles are also seeded across the level at
+startup, deterministically, so there is always something to find.
 
 ### Strands (`src/strands.js`)
 
@@ -130,7 +169,10 @@ constraints, strands live) — roughly 7% of a 60 fps frame.
 ```js
 sticky.blob.pressure = 14000   // stiffer, ball-like
 sticky.blob.edgeStiffness = 0.15  // sloppier, more jiggle
+sticky.blob.addGoo(0.5)        // fatten up
+sticky.blob.shotCost = 0.2     // strands are expensive now
 sticky.gun.reelForce = 60      // harder winch
+sticky.puddles.seed(40)        // litter the level with goo
 sticky.paused = true           // freeze physics, keep rendering
 sticky.step(60)                // advance 60 fixed frames by hand
 ```
