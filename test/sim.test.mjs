@@ -94,7 +94,7 @@ if (gun.strandCount === 1) {
   run(40);
   gun.cutAll();
   run(10);
-  const high = new THREE.Vector3(0, 14.3, -2);
+  const high = new THREE.Vector3(0, 20, -9.25); // high on the keep's south face
   const upDir = high.clone().sub(blob.center).normalize();
   gun.cooldown = 0;
   gun.shoot(blob.center.clone().addScaledVector(upDir, 1.3), upDir);
@@ -113,10 +113,10 @@ if (gun.strandCount === 1) {
 
 // --- 5b. swinging ----------------------------------------------------------
 gun.cutAll();
-blob.reset(new THREE.Vector3(9, 12, 8));
-run(5);
+blob.reset(new THREE.Vector3(-13, 4, -8));
+run(30);
 {
-  const anchor = new THREE.Vector3(0, 21.4, 8); // underside of the high platform
+  const anchor = new THREE.Vector3(-13, 11.6, -8); // underside of the broken walkway
   const dir = anchor.clone().sub(blob.center).normalize();
   gun.cooldown = 0;
   gun.shoot(blob.center.clone().addScaledVector(dir, 1.3), dir);
@@ -124,17 +124,25 @@ run(5);
   check('strand attaches to the high platform', gun.strandCount === 1);
   if (gun.strandCount === 1) {
     const strand = gun.strands[0];
-    blob.applyImpulse(new THREE.Vector3(-1, 0, 0), 14); // kick sideways
+    // Winch up first, then let go and swing — the way you actually travel.
+    gun.reeling = true;
+    run(45);
+    gun.reeling = false;
+    check('the winch hoists you up to the anchor', blob.center.y > 5, `y=${blob.center.y.toFixed(2)}`);
+    blob.applyImpulse(new THREE.Vector3(1, 0, 0), 12); // kick sideways
     let maxOverstretch = 0;
     let lowest = Infinity;
+    let maxSwing = 0;
     for (let i = 0; i < 120; i++) {
       run(1);
       maxOverstretch = Math.max(maxOverstretch, blob.center.distanceTo(strand.anchor) - strand.length);
       lowest = Math.min(lowest, blob.center.y);
+      // A pendulum comes back, so measure how far it got, not where it ended.
+      maxSwing = Math.max(maxSwing, Math.abs(blob.center.x + 13));
     }
     check('the rope does not stretch', maxOverstretch < 1.2, `overstretch=${maxOverstretch.toFixed(2)}`);
-    check('swinging keeps the blob off the floor', lowest > 4, `lowest y=${lowest.toFixed(2)}`);
-    check('the blob swings across', blob.center.x < 4, `x=${blob.center.x.toFixed(2)}`);
+    check('swinging keeps the blob off the floor', lowest > 3, `lowest y=${lowest.toFixed(2)}`);
+    check('the blob swings across', maxSwing > 1.5, `swing=${maxSwing.toFixed(2)}m`);
   }
   gun.cutAll();
   run(30);
@@ -227,7 +235,37 @@ run(60);
   check('seeded puddles sit on something', airborne.length === 0, `floating=${airborne.length}`);
 }
 
-// --- 10. raycast sanity ----------------------------------------------------
+// --- 10. the ruin ----------------------------------------------------------
+{
+  gun.cutAll();
+  check('the level is built from a few hundred blocks', world.colliders.length > 200,
+    `colliders=${world.colliders.length}`);
+  check('the broadphase grid is populated', world.grid.size > 40, `cells=${world.grid.size}`);
+
+  // Rubble piles are overlapping boxes — the one arrangement that can fight
+  // the contact solver — so check the blob actually settles on one.
+  blob.reset(new THREE.Vector3(-2, 9, 6));
+  run(200);
+  check('the blob settles on rubble instead of sinking or exploding',
+    finite() && blob.center.y > 0.6 && blob.velocity.length() < 1.2,
+    `y=${blob.center.y.toFixed(2)} |v|=${blob.velocity.length().toFixed(2)}`);
+
+  // The spawn has to be somewhere you can actually stand.
+  blob.reset(world.spawn);
+  run(150);
+  check('the spawn point is clear', finite() && Math.abs(blob.center.y - blob.radius) < 1.2,
+    `y=${blob.center.y.toFixed(2)}`);
+  check('the spawn is inside the walls',
+    Math.abs(blob.center.x) < world.bounds && Math.abs(blob.center.z) < world.bounds);
+
+  // Drive north out of the courtyard: the bailey should be walkable.
+  const fromZ = blob.center.z;
+  run(150, { move: new THREE.Vector3(0, 0, -1), jump: false, cling: false });
+  check('the bailey is drivable', blob.center.z < fromZ - 6, `dz=${(blob.center.z - fromZ).toFixed(1)}`);
+  check('driving over the ruin stays finite', finite());
+}
+
+// --- 11. raycast sanity ----------------------------------------------------
 const hit = world.raycast(new THREE.Vector3(0, 3, 20), new THREE.Vector3(0, -1, 0), 20);
 check('raycast finds the floor', hit && Math.abs(hit.point.y) < 0.05 && hit.normal.y > 0.9,
   hit ? `y=${hit.point.y.toFixed(3)}` : 'no hit');

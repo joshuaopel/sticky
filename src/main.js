@@ -16,8 +16,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1b2734);
-scene.fog = new THREE.Fog(0x203040, 55, 165);
+scene.background = new THREE.Color(0x0d1119);
+scene.fog = new THREE.FogExp2(0x121a26, 0.011);
 
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 500);
 camera.position.set(0, 6, 26);
@@ -25,11 +25,13 @@ camera.position.set(0, 6, 26);
 // Environment map — the goo reads as wet only if it has something to reflect.
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.32; // the ruin is lit by torches, not a studio
 
-const hemi = new THREE.HemisphereLight(0x86a4c8, 0x1a2410, 0.5);
+const hemi = new THREE.HemisphereLight(0x33507e, 0x140f0a, 0.42);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff2d5, 2.1);
+// Moonlight: cold, low and raking, so the blocks throw long shadows.
+const sun = new THREE.DirectionalLight(0xbcd2ff, 1.15);
 sun.position.set(26, 42, 18);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -43,7 +45,7 @@ sun.shadow.bias = -0.0009;
 sun.shadow.normalBias = 0.03;
 scene.add(sun);
 
-const rim = new THREE.DirectionalLight(0x7ad6ff, 0.6);
+const rim = new THREE.DirectionalLight(0x5c7ba8, 0.32);
 rim.position.set(-20, 14, -26);
 scene.add(rim);
 
@@ -54,9 +56,9 @@ const sky = new THREE.Mesh(
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      top: { value: new THREE.Color(0x35507a) },
-      bottom: { value: new THREE.Color(0x2b3d2a) },
-      horizon: { value: new THREE.Color(0x5b7899) },
+      top: { value: new THREE.Color(0x0a1224) },
+      bottom: { value: new THREE.Color(0x141a16) },
+      horizon: { value: new THREE.Color(0x2b3d5c) },
     },
     vertexShader: `
       varying vec3 vPos;
@@ -70,10 +72,25 @@ const sky = new THREE.Mesh(
       uniform vec3 top;
       uniform vec3 bottom;
       uniform vec3 horizon;
+      // Cheap hash, used only for stars.
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
+
       void main() {
-        float h = normalize(vPos).y;
-        vec3 c = mix(horizon, top, smoothstep(0.0, 0.55, h));
-        c = mix(c, bottom, smoothstep(0.0, -0.35, h));
+        vec3 dir = normalize(vPos);
+        vec3 c = mix(horizon, top, smoothstep(0.0, 0.55, dir.y));
+        c = mix(c, bottom, smoothstep(0.0, -0.35, dir.y));
+
+        // Stars, thinning out toward the horizon.
+        vec2 cell = floor(dir.xz * 140.0 / max(dir.y, 0.25));
+        float star = step(0.9965, hash(cell));
+        c += star * smoothstep(0.05, 0.5, dir.y) * vec3(0.8, 0.85, 1.0);
+
+        // A low moon to match where the directional light comes from.
+        float moon = smoothstep(0.995, 0.9985, dot(dir, normalize(vec3(0.5, 0.72, 0.34))));
+        c += moon * vec3(0.85, 0.9, 1.0);
+        c += pow(max(dot(dir, normalize(vec3(0.5, 0.72, 0.34))), 0.0), 48.0) * vec3(0.12, 0.16, 0.24);
         gl_FragColor = vec4(c, 1.0);
       }
     `,
@@ -105,8 +122,47 @@ blob.onSplat = (x, y, z, normal, strength) => {
 const controls = new Controls(camera, canvas, world);
 controls.target.copy(blob.center);
 
+let elapsed = 0;
+
+// Dust hanging in the air — nothing sells a ruin like something in the light.
+const MOTES = 700;
+const motePositions = new Float32Array(MOTES * 3);
+const moteSpeeds = new Float32Array(MOTES);
+for (let i = 0; i < MOTES; i++) {
+  motePositions[i * 3] = (Math.random() - 0.5) * 66;
+  motePositions[i * 3 + 1] = Math.random() * 24;
+  motePositions[i * 3 + 2] = (Math.random() - 0.5) * 66;
+  moteSpeeds[i] = 0.15 + Math.random() * 0.5;
+}
+const moteGeometry = new THREE.BufferGeometry();
+moteGeometry.setAttribute('position', new THREE.BufferAttribute(motePositions, 3));
+const motes = new THREE.Points(
+  moteGeometry,
+  new THREE.PointsMaterial({
+    color: 0xffd9a0,
+    size: 0.09,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+  })
+);
+motes.frustumCulled = false;
+scene.add(motes);
+
+function driftMotes(dt) {
+  const array = moteGeometry.attributes.position.array;
+  for (let i = 0; i < MOTES; i++) {
+    const i3 = i * 3;
+    array[i3 + 1] += moteSpeeds[i] * dt;
+    array[i3] += Math.sin(elapsed * 0.4 + i) * dt * 0.12;
+    if (array[i3 + 1] > 24) array[i3 + 1] = 0.2;   // recycle at the floor
+  }
+  moteGeometry.attributes.position.needsUpdate = true;
+}
+
 // A soft glow that rides along with the blob, so it lights the goo it lands on.
-const blobLight = new THREE.PointLight(0xa8ff3c, 6, 14, 2);
+const blobLight = new THREE.PointLight(0xa8ff3c, 8, 16, 2);
 scene.add(blobLight);
 
 // ---------------------------------------------------------------- boot ----
@@ -180,6 +236,9 @@ function step(dt, override) {
 const BASE_CAMERA_DISTANCE = 7.2;
 
 function render(dt) {
+  elapsed += dt;
+  world.update(dt, elapsed);
+  driftMotes(dt);
   const speed = blob.velocity.length();
   // Pull in as the blob shrinks so a drained blob is still readable.
   controls.distance = BASE_CAMERA_DISTANCE * (0.55 + 0.45 * blob.scale);

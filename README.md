@@ -1,8 +1,9 @@
 # STICKY
 
-A third-person demo where you play a blob of goo: a pressurised soft body that
-squashes against everything it touches, clings to walls, and fires strands of
-goo it can swing from and winch itself along — a slime-gun grapple.
+A third-person demo where you play a blob of goo loose in a ruined castle: a
+pressurised soft body that squashes against everything it touches, clings to
+walls, and fires strands of goo it can swing from and winch itself along — a
+slime-gun grapple.
 
 No build step, no install. Get it and run it:
 
@@ -140,9 +141,40 @@ is stretched and rippling slightly so it reads as goo.
 
 ### The rest
 
-- `src/world.js` — the arena and all collision. Every surface is an oriented box
-  with point-contact and slab-raycast queries in box-local space, so ramps cost
-  the same as walls.
+### The ruin (`src/world.js`)
+
+A moonlit castle in pieces: a gatehouse with a stuck portcullis, a hollow
+roofless keep with half a floor left and a stair up the outside, a great hall
+of broken columns under fallen beams, a dungeon pit with cages hanging over an
+iron grate, collapsed curtain walls you can climb through, and a bailey with a
+toppled king, a dry well, braziers and a wrecked cart.
+
+It is built entirely from blocks, by the same call that creates the collider —
+so what you look at is exactly what you collide with. A few notes on how it
+holds together:
+
+- **Set-piece builders.** `_crenellations`, `_arch`, `_stairs`, `_column`,
+  `_rubble`, `_torch`, `_banner`, `_chandelier`, `_cage`, `_statue`. The level
+  is written in those terms rather than as a list of boxes, so a ruined wall is
+  one call with a collapsed stretch in it. All randomness is seeded, so the ruin
+  falls down the same way every run.
+- **Merged draw calls.** Each block's geometry is baked into a per-material
+  bucket and merged at the end, so ~400 blocks cost about a dozen draws.
+- **Texture that keeps its scale.** BoxGeometry gives every face 0..1 UVs, which
+  would stretch one stone course across a 60-metre wall. `scaleBoxUVs` rescales
+  per face pair by that face's world size, so a course is a course everywhere.
+  The stone, flagstone, timber and iron maps are drawn procedurally onto
+  canvases at startup — no texture downloads.
+- **Broadphase.** With several hundred blocks, testing every collider per
+  particle per substep would eat the frame. Colliders are bucketed into a
+  uniform grid over the floor plan and each query only looks at the cell it is
+  in, which keeps the whole simulation at ~1.5 ms.
+- **Torches** flicker on a sum of sines, and the flames are stacks of additive
+  blocks. Fire, dust motes and a star dome do most of the atmosphere work.
+
+Collision itself is unchanged: every surface is an oriented box with
+point-contact and slab-raycast queries in box-local space, so a tilted block
+costs the same as a wall.
 - `src/controls.js` — pointer-locked third-person orbit camera. It pulls in
   rather than clipping through geometry, nudges its focus off whatever surface
   you are stuck to, and widens its FOV with speed.
