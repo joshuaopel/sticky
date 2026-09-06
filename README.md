@@ -59,6 +59,11 @@ strand and holding it reels you in, with **JUMP**, **CUT** and **CLING** beside
 it; cling is a toggle there rather than a held key, because you cannot hold a
 modifier and still drive and look. Portrait shows a rotate prompt.
 
+The stick is analog — a light push creeps, a full push commits — and touch runs
+a little calmer than mouse and keyboard, because a thumb cannot feather the way
+fingers ride keys. If that still feels wrong on your phone, add `?speed=1.3` to
+the URL for friskier or `?speed=0.7` for steadier (0.4 to 2).
+
 Up to four strands can be attached at once; firing a fifth drops the oldest.
 
 Every shot is **mass out of your body** — the blob visibly shrinks as you use

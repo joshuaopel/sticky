@@ -10,6 +10,11 @@ export function detectQuality() {
   const touch = (navigator.maxTouchPoints || 0) > 1;
   const mobileUA = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent || '');
 
+  const requested = Number(new URLSearchParams(location.search).get('speed'));
+  const speedScale = Number.isFinite(requested) && requested > 0
+    ? Math.min(2, Math.max(0.4, requested))
+    : 1;
+
   return {
     isTouch: (coarse && touch) || mobileUA,
     pixelRatio: Math.min(devicePixelRatio || 1, 2),
@@ -21,5 +26,10 @@ export function detectQuality() {
     maxTorchLights: 12,
     antialias: true,
     blobDetail: 3,
+    // A thumb cannot feather the way fingers ride keys, so the blob runs
+    // calmer on touch. `?speed=` scales it — 1.3 for friskier, 0.7 for
+    // steadier — since the right number is something you can only feel.
+    moveAccel: 0.68 * speedScale,
+    maxSpeed: 0.72 * speedScale,
   };
 }

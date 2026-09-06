@@ -115,6 +115,11 @@ scene.add(blob.mesh);
 const puddles = new PuddleField(scene, world, { transmission: quality.puddleTransmission });
 puddles.seed();
 
+if (quality.isTouch) {
+  blob.moveAccel *= quality.moveAccel;
+  blob.maxSpeed *= quality.maxSpeed;
+}
+
 const gun = new GooGun(scene, world, blob, puddles);
 
 // Hard landings throw goo off the body and leave it on the floor.

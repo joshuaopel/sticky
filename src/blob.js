@@ -130,6 +130,7 @@ export class GooBlob {
     this.grounded = false;
     this.clinging = false;
     this.squash = 1;
+    this.throttle = 0;
     this.wobble = 0;
     this.time = 0;
     this.onSplat = null;
@@ -501,7 +502,11 @@ export class GooBlob {
       // Locomotion. On a surface the move direction is projected onto the
       // contact plane, which is what lets you drive up walls while clinging.
       let climbing = false;
+      this.throttle = 0;
       if (input.move && input.move.lengthSq() > 1e-6) {
+        // How hard the stick is pushed. Keyboard input arrives at full length.
+        const throttle = Math.min(1, input.move.length());
+        this.throttle = throttle;
         _v.copy(input.move);
         if (this.contacts > 0) {
           const into = _v.dot(this.contactNormal);
@@ -519,8 +524,8 @@ export class GooBlob {
           }
         }
         _v.normalize();
-        const accel = this.moveAccel * (this.contacts > 0 ? 1 : this.airControl) * (climbing ? 0.2 : 1);
-        _spin.copy(this.contactNormal).cross(_v).multiplyScalar(climbing ? 0 : this.rollAssist);
+        const accel = this.moveAccel * throttle * (this.contacts > 0 ? 1 : this.airControl) * (climbing ? 0.2 : 1);
+        _spin.copy(this.contactNormal).cross(_v).multiplyScalar(climbing ? 0 : this.rollAssist * throttle);
 
         for (let i = 0; _v.lengthSq() > 1e-8 && i < this.count; i++) {
           const i3 = i * 3;
@@ -581,6 +586,18 @@ export class GooBlob {
     }
   }
 
+  /** Scale the whole body's velocity, keeping it moving as one piece. */
+  _scaleVelocity(scale) {
+    for (let i = 0; i < this.count; i++) {
+      const i3 = i * 3;
+      for (let k = 0; k < 3; k++) {
+        const j = i3 + k;
+        this.prev[j] = this.pos[j] - (this.pos[j] - this.prev[j]) * scale;
+      }
+    }
+    this.velocity.multiplyScalar(scale);
+  }
+
   _finalize(dt) {
     let cx = 0, cy = 0, cz = 0, vx = 0, vy = 0, vz = 0;
     let minY = Infinity, maxY = -Infinity;
@@ -601,18 +618,21 @@ export class GooBlob {
     const inv = 1 / (this.count * (dt / this.substeps));
     this.velocity.set(vx * inv, vy * inv, vz * inv);
 
-    // Speed limiter, applied to the whole body so it stays coherent.
+    // Governor: on the ground, a part-pushed stick settles at a part of top
+    // speed. It bleeds off rather than clamping, so landing a fast swing with
+    // a thumb resting on the stick does not stop you dead.
     const speed = this.velocity.length();
-    if (speed > this.maxSpeed) {
-      const scale = this.maxSpeed / speed;
-      for (let i = 0; i < this.count; i++) {
-        const i3 = i * 3;
-        for (let k = 0; k < 3; k++) {
-          const j = i3 + k;
-          this.prev[j] = this.pos[j] - (this.pos[j] - this.prev[j]) * scale;
-        }
+    if (this.contacts > 0 && this.throttle > 0 && this.throttle < 1) {
+      const target = this.maxSpeed * Math.max(0.25, this.throttle);
+      if (speed > target) {
+        const bleed = Math.min(0.35, ((speed - target) / this.maxSpeed) * dt * 9);
+        this._scaleVelocity(1 - bleed);
       }
-      this.velocity.multiplyScalar(scale);
+    }
+
+    // Hard ceiling, applied to the whole body so it stays coherent.
+    if (speed > this.maxSpeed) {
+      this._scaleVelocity(this.maxSpeed / speed);
     }
 
     this.squash = THREE.MathUtils.clamp((maxY - minY) / (this.radius * 2), 0.2, 1.6);

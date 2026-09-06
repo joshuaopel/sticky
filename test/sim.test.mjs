@@ -61,6 +61,28 @@ run(90, { move: new THREE.Vector3(0, 0, -1), jump: false, cling: false });
 check('moves in the commanded direction', blob.center.z < startZ - 2, `dz=${(blob.center.z - startZ).toFixed(2)}`);
 check('stays finite while driving', finite());
 
+// --- 3b. analog throttle ---------------------------------------------------
+// A stick pushed half way should move you at about half pace; before this the
+// input was normalised and every touch meant full speed.
+{
+  const distanceFor = (throttle) => {
+    const test = new GooBlob(world, { position: new THREE.Vector3(0, 3, 24) });
+    for (let i = 0; i < 60; i++) test.update(DT, idle);
+    const start = test.center.clone();
+    const move = new THREE.Vector3(0, 0, -throttle);
+    for (let i = 0; i < 90; i++) test.update(DT, { move, jump: false, cling: false });
+    return test.center.distanceTo(start);
+  };
+  const full = distanceFor(1);
+  const half = distanceFor(0.5);
+  const nudge = distanceFor(0.2);
+  check('a half-pushed stick travels less than a full one', half < full * 0.8,
+    `${half.toFixed(1)}m vs ${full.toFixed(1)}m`);
+  check('a light push still moves, slowly', nudge > 0.3 && nudge < half,
+    `${nudge.toFixed(1)}m`);
+  check('the throttle is ordered', nudge < half && half < full);
+}
+
 // --- 4. jumping ------------------------------------------------------------
 run(60);
 const restY = blob.center.y;

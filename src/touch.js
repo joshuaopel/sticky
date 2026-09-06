@@ -8,14 +8,25 @@
  */
 export function setupTouch(controls, canvas, ui) {
   const stickRadius = 62;
+  // Below this the thumb is just resting; above it the range is rescaled so a
+  // full push still means full speed.
+  const deadzone = 0.16;
   let stickId = null;
   let lookId = null;
   let lookX = 0;
   let lookY = 0;
 
   const setStick = (x, y) => {
-    controls.touch.x = x;
-    controls.touch.y = y;
+    const magnitude = Math.hypot(x, y);
+    if (magnitude < deadzone) {
+      controls.touch.x = 0;
+      controls.touch.y = 0;
+    } else {
+      // Curve the low end so small pushes creep and big pushes commit.
+      const scaled = Math.pow((magnitude - deadzone) / (1 - deadzone), 1.35) / magnitude;
+      controls.touch.x = x * scaled;
+      controls.touch.y = y * scaled;
+    }
     if (!ui.knob) return;
     ui.knob.style.transform = `translate(${x * stickRadius}px, ${y * stickRadius}px)`;
   };

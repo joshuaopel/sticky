@@ -125,7 +125,10 @@ export class Controls {
       out.addScaledVector(_forward, -this.touch.y);
       out.addScaledVector(_right, this.touch.x);
     }
-    if (out.lengthSq() > 1e-6) out.normalize();
+    // Clamp rather than normalise: a keyboard always asks for full speed, but
+    // a half-pushed stick should mean half speed.
+    const length = out.length();
+    if (length > 1) out.divideScalar(length);
     return out;
   }
 
